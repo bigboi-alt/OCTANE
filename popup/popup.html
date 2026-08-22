@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>OCTANE</title>
+  <style>
+    :root {
+      --bg: #000000;
+      --surface: #0e0e11;
+      --surface2: #17171b;
+      --fg: #f0f0f2;
+      --muted: #9d9da6;
+      --subtle: #6b6b73;
+      --line: #1d1d21;
+      --line2: #2f2f35;
+      --accent: #f0f0f2;
+      --accent-soft: rgba(255, 255, 255, 0.08);
+      --ok: #3fb950;
+      --danger: #f85149;
+      --radius: 9px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      width: 396px;
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+        Helvetica, Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--fg);
+      background: var(--bg);
+    }
+    ::-webkit-scrollbar { width: 10px; }
+    ::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 6px; border: 2px solid var(--bg); }
+    ::-webkit-scrollbar-track { background: transparent; }
+    button { font: inherit; color: inherit; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ---------- header ---------- */
+    header {
+      display: flex; align-items: center; gap: 11px;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .logo {
+      flex: none; margin: 0; display: block; height: 56px; width: auto;
+      image-rendering: auto;
+    }
+    header h1 { font-size: 16px; margin: 0; font-weight: 700; letter-spacing: 2.5px; }
+    header p { margin: 1px 0 0; color: var(--muted); font-size: 11.5px; }
+    .ver {
+      margin-left: auto; align-self: flex-start;
+      font-size: 10.5px; font-weight: 600; color: var(--muted);
+      border: 1px solid var(--line2); border-radius: 999px; padding: 2px 8px;
+    }
+
+    /* ---------- tabs ---------- */
+    nav.tabs {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      padding: 0 16px; gap: 4px; border-bottom: 1px solid var(--line);
+    }
+    nav.tabs button {
+      position: relative; background: none; border: 0; cursor: pointer;
+      padding: 10px 4px 11px; font-size: 13px; font-weight: 600; color: var(--muted);
+    }
+    nav.tabs button:hover { color: var(--fg); }
+    nav.tabs button[aria-selected="true"] { color: var(--fg); }
+    nav.tabs button[aria-selected="true"]::after {
+      content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px;
+      height: 2px; border-radius: 2px; background: var(--accent);
+    }
+
+    /* ---------- panels ---------- */
+    .panel { padding: 14px 16px 12px; display: block; }
+    .panel[hidden] { display: none; }
+    .block { margin-bottom: 16px; }
+    .block:last-child { margin-bottom: 4px; }
+    h2 {
+      margin: 0 0 8px; font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .7px; color: var(--muted);
+      display: flex; align-items: baseline; gap: 6px;
+    }
+    h2 .opt { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--subtle); }
+    .hint { margin: 6px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.45; }
+
+    /* ---------- theme grid ---------- */
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .card {
+      position: relative; display: flex; flex-direction: column; gap: 7px;
+      text-align: left; background: var(--surface); border: 1px solid var(--line2);
+      border-radius: var(--radius); padding: 8px; cursor: pointer; color: var(--fg);
+      transition: border-color .12s ease, transform .12s ease;
+    }
+    .card:hover { border-color: var(--subtle); }
+    .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .card[aria-pressed="true"] {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+    .card .check {
+      position: absolute; top: 8px; right: 8px; width: 16px; height: 16px;
+      border-radius: 50%; background: var(--accent); display: none;
+      align-items: center; justify-content: center;
+    }
+    .card[aria-pressed="true"] .check { display: flex; }
+    .card .check svg { width: 9px; height: 9px; }
+    .swatches { display: flex; border-radius: 6px; overflow: hidden; border: 1px solid var(--line2); }
+    .swatches i { flex: 1; height: 20px; display: block; }
+    .card .name { font-weight: 600; font-size: 12px; line-height: 1.15; }
+    .row-meta { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+    .card .meta { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+
+    /* ---------- generic controls ---------- */
+    .row { display: flex; align-items: center; gap: 8px; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .two-col label { font-size: 11.5px; color: var(--muted); display: flex; flex-direction: column; gap: 5px; }
+    input[type="color"] {
+      width: 100%; height: 30px; padding: 2px; border: 1px solid var(--line2);
+      border-radius: 7px; background: var(--surface); cursor: pointer;
+    }
+    input[type="text"], input[type="url"] {
+      flex: 1; min-width: 0; height: 30px; padding: 5px 9px;
+      border: 1px solid var(--line2); border-radius: 7px;
+      font: inherit; font-size: 12.5px; color: var(--fg); background: var(--surface);
+    }
+    input[type="text"]:focus-visible, input[type="url"]:focus-visible,
+    input[type="color"]:focus-visible, input[type="range"]:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 1px;
+    }
+    input::placeholder { color: var(--subtle); }
+    button.ghost {
+      height: 30px; padding: 0 11px; border: 1px solid var(--line2); border-radius: 7px;
+      background: var(--surface); color: var(--fg); font-weight: 600; cursor: pointer;
+      white-space: nowrap;
+    }
+    button.ghost:hover { background: var(--surface2); border-color: var(--subtle); }
+    button.primary {
+      height: 32px; padding: 0 14px; border: 0; border-radius: 7px;
+      background: var(--accent); color: #000; font-weight: 700; cursor: pointer;
+    }
+    button.primary:hover { filter: brightness(0.9); }
+    button.wide { width: 100%; justify-content: center; display: flex; align-items: center; }
+    button.ghost.wide { height: 32px; }
+
+    /* segmented control */
+    .seg {
+      display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px;
+      background: var(--surface); border: 1px solid var(--line2); border-radius: 8px; padding: 3px;
+    }
+    .seg button {
+      border: 0; background: transparent; padding: 6px 0; border-radius: 6px;
+      font-weight: 600; cursor: pointer; color: var(--muted); font-size: 12.5px;
+      transition: background .12s ease, color .12s ease;
+    }
+    .seg button:hover { color: var(--fg); }
+    .seg button[aria-pressed="true"] { background: var(--surface2); color: var(--fg); box-shadow: 0 0 0 1px var(--line2); }
+
+    /* toggle */
+    label.toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+    label.toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .track {
+      flex: none; width: 34px; height: 19px; border-radius: 999px; position: relative;
+      background: var(--line2); transition: background .15s ease;
+    }
+    .track::after {
+      content: ""; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px;
+      border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.35);
+      transition: left .15s ease, background .15s ease;
+    }
+    input:checked + .track { background: var(--accent); }
+    input:checked + .track::after { left: 17px; background: #000; }
+    .toggle .txt { line-height: 1.35; }
+    .toggle .txt .hint { margin: 0; }
+
+    /* background tab */
+    .bgpreview {
+      height: 58px; border-radius: 8px; border: 1px solid var(--line2);
+      background: var(--surface) center/cover no-repeat; margin-top: 8px;
+      position: relative; overflow: hidden;
+    }
+    .bgpreview .placeholder {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      color: var(--subtle); font-size: 11.5px;
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip {
+      display: flex; align-items: center; gap: 7px; padding: 4px 9px 4px 5px;
+      background: var(--surface); border: 1px solid var(--line2); border-radius: 999px;
+      cursor: pointer; font-size: 11.5px; font-weight: 600; color: var(--muted);
+    }
+    .chip:hover { color: var(--fg); border-color: var(--subtle); }
+    .chip i { width: 14px; height: 14px; border-radius: 50%; display: block; border: 1px solid var(--line2); }
+    label.range {
+      display: flex; align-items: center; gap: 10px; margin-top: 10px;
+      font-size: 11.5px; color: var(--muted);
+    }
+    label.range .lbl { flex: none; }
+    input[type="range"] { flex: 1; accent-color: var(--accent); height: 20px; }
+    label.range output { flex: none; min-width: 30px; text-align: right; font-variant-numeric: tabular-nums; color: var(--fg); }
+
+    /* custom tab */
+    .custom-grid { display: flex; flex-direction: column; gap: 7px; }
+    .cfield {
+      display: grid; grid-template-columns: 1fr 46px 74px; gap: 8px; align-items: center;
+    }
+    .cfield .lab { font-size: 12.5px; color: var(--fg); }
+    .cfield input[type="color"] { height: 28px; }
+    .cfield input[type="text"] { height: 28px; font-size: 12px; }
+
+    /* toast */
+    #toast {
+      position: fixed; left: 50%; bottom: 12px; transform: translate(-50%, 12px);
+      background: #17171b; border: 1px solid var(--line2); color: var(--fg);
+      border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 600;
+      opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease;
+      box-shadow: 0 6px 24px rgba(0,0,0,.6); z-index: 99;
+    }
+    #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    /* footer */
+    footer {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 11px 16px; border-top: 1px solid var(--line);
+      color: var(--muted); font-size: 11.5px;
+    }
+    footer .links { display: flex; gap: 10px; align-items: center; }
+    button.link { background: none; border: 0; padding: 0; font: inherit; color: var(--muted); cursor: pointer; }
+    button.link:hover { color: var(--fg); text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header>
+    <img class="logo" src="../icons/logo.png" alt="OCTANE" />
+    <div>
+      <h1>OCTANE</h1>
+      <p>Themes · backgrounds · zen for GitHub</p>
+    </div>
+    <span class="ver">v0.4.3</span>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="theme" aria-selected="true">Theme</button>
+    <button role="tab" data-tab="background" aria-selected="false">Background</button>
+    <button role="tab" data-tab="custom" aria-selected="false">Custom</button>
+  </nav>
+
+  <!-- ================= THEME ================= -->
+  <section class="panel" id="panel-theme" role="tabpanel">
+    <div class="block">
+      <h2>Themes</h2>
+      <div class="grid" id="themes"></div>
+    </div>
+
+    <div class="block">
+      <h2>Accent color <span class="opt">(optional)</span></h2>
+      <div class="row">
+        <input type="color" id="accent" value="#5b7cfa" />
+        <input type="text" id="accentHex" maxlength="7" placeholder="#5b7cfa" spellcheck="false" />
+        <button class="ghost" id="accentClear" type="button">Clear</button>
+      </div>
+      <p class="hint">Overrides links &amp; primary buttons on top of any preset theme.</p>
+    </div>
+
+    <div class="block">
+      <h2>Simplify for newcomers</h2>
+      <div class="seg" id="simplify" role="group" aria-label="Simplify mode">
+        <button data-v="off" type="button">Off</button>
+        <button data-v="gentle" type="button">Gentle</button>
+        <button data-v="focus" type="button">Focus</button>
+      </div>
+      <p class="hint" id="simplifyHint"></p>
+    </div>
+
+    <div class="block">
+      <label class="toggle">
+        <input type="checkbox" id="fx" />
+        <span class="track"></span>
+        <span class="txt"><strong>Theme effects</strong><br />
+          <span class="hint">Falling petals (Sakura), twinkling stars (Cosmos) and embers (Nocturne &amp; Kin-Beni).</span></span>
+      </label>
+    </div>
+
+    <div class="block">
+      <label class="toggle">
+        <input type="checkbox" id="tips" />
+        <span class="track"></span>
+        <span class="txt"><strong>New-user tips banner</strong><br />
+          <span class="hint">Friendly “Quick start” bar on repository pages.</span></span>
+      </label>
+    </div>
+  </section>
+
+  <!-- ================= BACKGROUND ================= -->
+  <section class="panel" id="panel-background" role="tabpanel" hidden>
+    <div class="block">
+      <h2>Background type</h2>
+      <div class="seg" id="bgType" role="group" aria-label="Background type">
+        <button data-v="none" type="button">None</button>
+        <button data-v="image" type="button">Image</button>
+        <button data-v="gradient" type="button">Gradient</button>
+        <button data-v="color" type="button">Color</button>
+      </div>
+      <p class="hint" id="bgHint">Shown behind your GitHub content on repo pages &mdash; cards stay solid so text stays readable.</p>
+    </div>
+
+    <div class="block" id="bgImageCtl" hidden>
+      <h2>Wallpaper</h2>
+      <div class="row">
+        <button class="primary" id="bgUpload" type="button">Upload image</button>
+        <button class="ghost" id="bgRemoveImg" type="button">Remove</button>
+      </div>
+      <input type="file" id="bgFile" accept="image/*" hidden />
+      <input type="url" id="bgUrl" placeholder="…or paste an image URL (https://)" style="margin-top:8px; width:100%;" />
+      <div class="bgpreview" id="bgPreview"><span class="placeholder">No image yet</span></div>
+    </div>
+
+    <div class="block" id="bgGradientCtl" hidden>
+      <h2>Gradient</h2>
+      <div class="two-col">
+        <label>Start <input type="color" id="bgC1" value="#5b7cfa" /></label>
+        <label>End <input type="color" id="bgC2" value="#bd93f9" /></label>
+      </div>
+      <div class="chips" id="gradientChips"></div>
+      <label class="range">
+        <span class="lbl">Angle</span>
+        <input type="range" id="bgAngle" min="0" max="360" step="15" value="135" />
+        <output id="bgAngleVal">135°</output>
+      </label>
+    </div>
+
+    <div class="block" id="bgColorCtl" hidden>
+      <h2>Solid color</h2>
+      <input type="color" id="bgColor" value="#0d1117" style="height:40px;" />
+      <div class="chips" id="colorChips"></div>
+    </div>
+
+    <div class="block" id="bgFadeCtl" hidden>
+      <label class="range">
+        <span class="lbl">Fade</span>
+        <input type="range" id="bgFade" min="0" max="100" step="5" value="20" />
+        <output id="bgFadeVal">20%</output>
+      </label>
+      <p class="hint">Lower = wallpaper more visible. Higher = keeps text the most readable.</p>
+    </div>
+
+    <div class="block">
+      <div class="bgpreview" id="bgPreviewBig"><span class="placeholder">Background off</span></div>
+    </div>
+  </section>
+
+  <!-- ================= CUSTOM ================= -->
+  <section class="panel" id="panel-custom" role="tabpanel" hidden>
+    <div class="block">
+      <h2>Build your own theme</h2>
+      <div class="seg" id="customBase" role="group" aria-label="Base palette">
+        <button data-v="light" type="button">Light base</button>
+        <button data-v="dark" type="button">Dark base</button>
+      </div>
+      <p class="hint">Pick a base, then tweak any color &mdash; edits apply instantly. Anything you don&rsquo;t touch is derived automatically.</p>
+    </div>
+
+    <div class="block">
+      <div class="custom-grid" id="customFields"></div>
+    </div>
+
+    <div class="block">
+      <button class="primary wide" id="customApply" type="button">Use this theme</button>
+      <button class="ghost wide" id="customReset" type="button" style="margin-top:6px;">Reset to base</button>
+    </div>
+
+    <div class="block">
+      <label class="toggle">
+        <input type="checkbox" id="hscroll" />
+        <span class="track"></span>
+        <span class="txt"><strong>Hide horizontal scrollbars</strong><br />
+          <span class="hint">Removes the sideways scrollbar in code &amp; tables (still scrollable with trackpad / Shift&nbsp;+&nbsp;wheel).</span></span>
+      </label>
+    </div>
+  </section>
+
+  <footer>
+    <span>MIT &middot; open source</span>
+    <div class="links">
+      <button class="link" id="reset" type="button">Reset all</button>
+      <a href="https://github.com/yourname/octane" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </footer>
+
+  <div id="toast" role="status"></div>
+
+  <script src="../shared/themes.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "OCTANE — Themes & Zen for GitHub",
+  "version": "0.4.3",
+  "description": "Restyle GitHub with themes, ambient effects, custom backgrounds and your own color schemes — plus a declutter mode for newcomers.",
+  "author": "OCTANE contributors",
+  "homepage_url": "https://github.com/yourname/octane",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "OCTANE",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "permissions": ["storage", "unlimitedStorage"],
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/*", "https://gist.github.com/*"],
+      "js": ["shared/themes.js", "content/content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}
