@@ -29,15 +29,16 @@
     "--borderColor-default": ["--color-border-default"],
     "--borderColor-muted": ["--color-border-muted"],
     "--borderColor-subtle": ["--color-border-subtle"],
-    "--btn-primary-bg": ["--color-btn-primary-bg"],
-    "--btn-primary-fg": ["--color-btn-primary-text", "--btn-primary-fgColor"],
-    "--btn-primary-hover-bg": ["--color-btn-primary-hover-bg"],
-    "--btn-bg": ["--color-btn-bg"],
-    "--btn-fg": ["--color-btn-text"],
-    "--btn-border": ["--color-btn-border"],
-    "--btn-hover-bg": ["--color-btn-hover-bg"],
-    "--btn-active-bg": ["--color-btn-active-bg"],
-    "--btn-selected-bg": ["--color-btn-selected-bg"],
+    "--btn-primary-bg": ["--color-btn-primary-bg", "--button-primary-bgColor-rest"],
+    "--btn-primary-fg": ["--color-btn-primary-text", "--btn-primary-fgColor", "--button-primary-fgColor-rest", "--button-primary-iconColor-rest"],
+    "--btn-primary-hover-bg": ["--color-btn-primary-hover-bg", "--button-primary-bgColor-hover", "--button-primary-bgColor-active"],
+    "--btn-primary-border": ["--color-btn-primary-border", "--button-primary-borderColor-rest", "--button-primary-borderColor-hover", "--button-primary-borderColor-active"],
+    "--btn-bg": ["--color-btn-bg", "--button-default-bgColor-rest", "--control-bgColor-rest"],
+    "--btn-fg": ["--color-btn-text", "--button-default-fgColor-rest"],
+    "--btn-border": ["--color-btn-border", "--button-default-borderColor-rest"],
+    "--btn-hover-bg": ["--color-btn-hover-bg", "--button-default-bgColor-hover", "--control-bgColor-hover"],
+    "--btn-active-bg": ["--color-btn-active-bg", "--button-default-bgColor-active", "--control-bgColor-active"],
+    "--btn-selected-bg": ["--color-btn-selected-bg", "--button-default-bgColor-selected"],
     "--header-bgColor": ["--color-header-bg", "--page-header-bgColor", "--color-page-header-bg"],
     "--header-fgColor": ["--color-header-text", "--header-fgColor-default"],
     "--header-search-bg": ["--color-header-search-bg"],
@@ -546,6 +547,7 @@
     tips: false,
     fx: true,
     hideHScroll: false,
+    vScroll: true,
     bg: {
       type: "none",
       color: "#0d1117",
@@ -598,13 +600,20 @@
     return out;
   }
 
+  /** Deep-clone plain JSON data (settings are always JSON-safe). */
+  function clone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
   function normalizeSettings(stored) {
-    var out = deepMerge(DEFAULTS, stored || {});
-    if (!out.custom || typeof out.custom !== "object") out.custom = DEFAULTS.custom;
+    // Clone DEFAULTS first so callers can never mutate the shared defaults
+    // through leftover object references (bg / custom / colors).
+    var out = deepMerge(clone(DEFAULTS), stored || {});
+    if (!out.custom || typeof out.custom !== "object") out.custom = clone(DEFAULTS.custom);
     if (!out.custom.colors || typeof out.custom.colors !== "object") {
-      out.custom.colors = DEFAULTS.custom.colors;
+      out.custom.colors = clone(DEFAULTS.custom.colors);
     }
-    if (!out.bg || typeof out.bg !== "object") out.bg = DEFAULTS.bg;
+    if (!out.bg || typeof out.bg !== "object") out.bg = clone(DEFAULTS.bg);
     return out;
   }
 
@@ -618,6 +627,7 @@
     buildCustomVars: buildCustomVars,
     normalizeSettings: normalizeSettings,
     deepMerge: deepMerge,
+    clone: clone,
     expand: expand,
     hexToRgb: hexToRgb,
     luminance: luminance,
