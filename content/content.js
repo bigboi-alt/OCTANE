@@ -1,5 +1,5 @@
 /**
- * OCTANE content script — v0.4.3
+ * OCTANE content script — v0.5.0
  *
  * Runs on github.com / gist.github.com. Responsibilities:
  *   1. Inject the active theme (preset or custom) as CSS custom properties
@@ -29,19 +29,43 @@
   var tipsDismissed = false;
 
   /* ------------------------------------------------------------------ *
-   * Settings (normalized; bgImage lives in storage.local)
+   * Settings — everything lives in chrome.storage.local.
+   *
+   * v0.5.0: settings moved from storage.sync to storage.local. sync has a
+   * hard quota of ~120 writes/minute, which live color-picker dragging blew
+   * through in seconds — after that every write silently failed and the
+   * customizer "stopped working". local has no such rate limit (and we have
+   * unlimitedStorage). Old sync data is migrated over once.
    * ------------------------------------------------------------------ */
   function getAll(cb) {
     try {
-      chrome.storage.sync.get(GHX.DEFAULTS, function (s) {
-        var merged = GHX.normalizeSettings(s);
-        chrome.storage.local.get({ bgImage: "" }, function (l) {
-          merged.bgImage = (l && l.bgImage) || "";
+      chrome.storage.local.get(null, function (l) {
+        l = l || {};
+        if (l.__migrated || typeof l.theme === "string") {
+          var merged = GHX.normalizeSettings(l);
+          merged.bgImage = l.bgImage || "";
           cb(merged);
-        });
+          return;
+        }
+        // One-time migration from the old storage.sync home.
+        try {
+          chrome.storage.sync.get(null, function (sy) {
+            sy = sy || {};
+            var m = GHX.normalizeSettings(sy);
+            m.bgImage = l.bgImage || "";
+            try {
+              chrome.storage.local.set(Object.assign({}, sy, { __migrated: true }));
+            } catch (e2) {}
+            cb(m);
+          });
+        } catch (e1) {
+          var fallback = GHX.normalizeSettings(l);
+          fallback.bgImage = l.bgImage || "";
+          cb(fallback);
+        }
       });
     } catch (e) {
-      cb(Object.assign({}, GHX.DEFAULTS));
+      cb(GHX.normalizeSettings({}));
     }
   }
 
@@ -73,7 +97,16 @@
         "--color-accent-fg": a, "--color-accent-emphasis": a,
         "--color-accent-muted": a + "55", "--color-accent-subtle": a + "1f",
         "--color-btn-primary-bg": a, "--color-btn-primary-hover-bg": hover,
-        "--color-btn-primary-text": text
+        "--color-btn-primary-text": text, "--btn-primary-fgColor": text,
+        // GitHub's current Primer button tokens (the green "Code" button etc.)
+        "--button-primary-bgColor-rest": a,
+        "--button-primary-bgColor-hover": hover,
+        "--button-primary-bgColor-active": hover,
+        "--button-primary-fgColor-rest": text,
+        "--button-primary-iconColor-rest": text,
+        "--button-primary-borderColor-rest": a,
+        "--button-primary-borderColor-hover": hover,
+        "--button-primary-borderColor-active": hover
       });
     }
     return vars;
@@ -102,13 +135,31 @@
     var rules = [];
     if (wallpaperActive(settings)) {
       rules.push(
+        // Top-level layout wrappers on EVERY page type (repo, dashboard/feed,
+        // profile, issues …) go transparent so the wallpaper shows through.
+        // Cards/boxes inside stay solid so text remains readable.
         "html[data-ghx-theme] body,",
         "html[data-ghx-theme] .application-main,",
         "html[data-ghx-theme] main,",
         "html[data-ghx-theme] #repo-content-pjax-container,",
         "html[data-ghx-theme] #js-pjax-container,",
-        "html[data-ghx-theme] .Layout-main {",
+        "html[data-ghx-theme] .Layout-main,",
+        // Dashboard / feed containers
+        "html[data-ghx-theme] #dashboard,",
+        "html[data-ghx-theme] .dashboard,",
+        "html[data-ghx-theme] .news,",
+        "html[data-ghx-theme] .feed-container,",
+        "html[data-ghx-theme] .feed-content,",
+        "html[data-ghx-theme] .feed-background,",
+        "html[data-ghx-theme] .feed-main,",
+        "html[data-ghx-theme] .feed-left-sidebar,",
+        "html[data-ghx-theme] .feed-right-sidebar,",
+        "html[data-ghx-theme] .dashboard-sidebar,",
+        "html[data-ghx-theme] .application-main > div,",
+        "html[data-ghx-theme] main > .position-relative,",
+        "html[data-ghx-theme] [data-turbo-body] {",
         "  background-color: transparent !important;",
+        "  background-image: none !important;",
         "}"
       );
     } else {
@@ -123,19 +174,41 @@
       );
     }
     rules.push("html[data-ghx-theme] body { color: var(--fgColor-default) !important; }");
+
+    // Profile page: month headings ("August 2026") in the contribution
+    // timeline paint their own solid box (old --color-* token) to mask the
+    // timeline line. With themes/wallpapers that box shows up as a little
+    // mismatched background behind the label — remove it and let the
+    // heading sit cleanly on the page.
+    rules.push(
+      "html[data-ghx-theme] .profile-timeline-month-heading,",
+      "html[data-ghx-theme] .profile-timeline-month-heading .color-bg-default,",
+      "html[data-ghx-theme] h3.profile-timeline-month-heading {",
+      "  background: transparent !important;",
+      "  background-color: transparent !important;",
+      "}",
+      "html[data-ghx-theme] .profile-timeline-month-heading::before,",
+      "html[data-ghx-theme] .profile-timeline-month-heading::after {",
+      "  background: transparent !important;",
+      "}",
+      // Sticky year list beside the timeline paints a solid canvas too.
+      "html[data-ghx-theme] .js-profile-timeline-year-list.color-bg-default {",
+      "  background: " + (wallpaperActive(settings) ? "transparent" : "var(--bgColor-default)") + " !important;",
+      "}"
+    );
     return rules.join("\n");
   }
 
   function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
 
-  function buildBgCss(settings, onRepo) {
+  function buildBgCss(settings) {
     var bg = settings.bg || {};
     if (!bg.type || bg.type === "none") return "";
     var rules = [];
-    var fade = clamp(Number(bg.fade) || 0, 0, 100);
-    // On non-repo pages (dashboard, feed, profile) the layout is denser, so
-    // enforce a readability floor: the wallpaper still shows, just dimmer.
-    var scrim = onRepo ? fade : Math.max(fade, 55);
+    // The fade slider is respected on EVERY page (repo, dashboard, profile).
+    // The old "readability floor" forced 55%+ dimming on the dashboard, which
+    // made wallpapers look like they simply weren't applying there.
+    var scrim = clamp(Number(bg.fade) || 0, 0, 100);
 
     if (bg.type === "color") {
       rules.push("html { background-color: " + bg.color + " !important; }");
@@ -189,6 +262,51 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * Primary buttons — the green "Code" button et al.
+   * GitHub's newest React UI reads --button-primary-* tokens; some builds
+   * still hardcode values on the element. Cover both: the tokens are set in
+   * themeVars/buildCustomVars, and these element-level rules are the
+   * fallback so recoloring the Code button ALWAYS works.
+   * ------------------------------------------------------------------ */
+  function primaryBtnCss(settings) {
+    var vars = themeVars(settings);
+    var bg = vars["--btn-primary-bg"];
+    if (!bg) return "";
+    var fg = vars["--btn-primary-fg"] || GHX.readableText(bg);
+    var hover = vars["--btn-primary-hover-bg"] || GHX.shade(bg, -0.12);
+    return [
+      "/* OCTANE: primary buttons (Code button etc.) */",
+      "html[data-ghx-theme] .btn-primary,",
+      "html[data-ghx-theme] .Button--primary,",
+      "html[data-ghx-theme] button[data-variant=\"primary\"],",
+      "html[data-ghx-theme] summary[data-variant=\"primary\"],",
+      "html[data-ghx-theme] a[data-variant=\"primary\"],",
+      "html[data-ghx-theme] [class*=\"prc-Button-ButtonBase\"][data-variant=\"primary\"] {",
+      "  background-color: " + bg + " !important;",
+      "  border-color: " + bg + " !important;",
+      "  color: " + fg + " !important;",
+      "  fill: " + fg + " !important;",
+      "}",
+      "html[data-ghx-theme] .btn-primary:hover,",
+      "html[data-ghx-theme] .Button--primary:hover,",
+      "html[data-ghx-theme] button[data-variant=\"primary\"]:hover,",
+      "html[data-ghx-theme] summary[data-variant=\"primary\"]:hover,",
+      "html[data-ghx-theme] a[data-variant=\"primary\"]:hover,",
+      "html[data-ghx-theme] [class*=\"prc-Button-ButtonBase\"][data-variant=\"primary\"]:hover {",
+      "  background-color: " + hover + " !important;",
+      "  border-color: " + hover + " !important;",
+      "}",
+      "html[data-ghx-theme] .btn-primary svg,",
+      "html[data-ghx-theme] .Button--primary svg,",
+      "html[data-ghx-theme] [class*=\"prc-Button-ButtonBase\"][data-variant=\"primary\"] svg {",
+      "  fill: " + fg + " !important;",
+      "  color: " + fg + " !important;",
+      "}",
+      ""
+    ].join("\n");
+  }
+
+  /* ------------------------------------------------------------------ *
    * Optional: hide horizontal ("side") scrollbars in code & tables.
    * Content still scrolls via trackpad / Shift+wheel.
    * ------------------------------------------------------------------ */
@@ -212,6 +330,44 @@
     "}",
     ""
   ].join("\n");
+
+  /* ------------------------------------------------------------------ *
+   * Themed vertical scrollbar — the main page scrollbar on the right side
+   * of the site is restyled to match the active theme (slim thumb, no
+   * arrow buttons, transparent track so the wallpaper shows through).
+   * ------------------------------------------------------------------ */
+  function vscrollCss(settings) {
+    if (settings.vScroll === false) return "";
+    var vars = themeVars(settings);
+    var accent = vars["--accent-emphasis"] || vars["--accent-fgColor"] || "#5b7cfa";
+    var border = vars["--borderColor-default"] || "#30363d";
+    var track = wallpaperActive(settings)
+      ? "transparent"
+      : (vars["--bgColor-inset"] || vars["--bgColor-default"] || "transparent");
+    return [
+      "/* OCTANE: themed vertical scrollbar */",
+      "html[data-ghx-vscroll] {",
+      "  scrollbar-width: thin !important;",
+      "  scrollbar-color: " + accent + " " + track + " !important;",
+      "}",
+      "html[data-ghx-vscroll]::-webkit-scrollbar { width: 10px; height: 10px; }",
+      "html[data-ghx-vscroll]::-webkit-scrollbar-track { background: " + track + "; }",
+      "html[data-ghx-vscroll]::-webkit-scrollbar-thumb {",
+      "  background: " + accent + "; border-radius: 999px;",
+      "  border: 2px solid " + (track === "transparent" ? "transparent" : track) + ";",
+      "  background-clip: padding-box;",
+      "}",
+      "html[data-ghx-vscroll]::-webkit-scrollbar-thumb:hover { background: " + accent + "; }",
+      "html[data-ghx-vscroll]::-webkit-scrollbar-corner { background: transparent; }",
+      "html[data-ghx-vscroll] body ::-webkit-scrollbar:vertical { width: 10px; }",
+      "html[data-ghx-vscroll] body ::-webkit-scrollbar-thumb {",
+      "  background: " + border + "; border-radius: 999px;",
+      "}",
+      "html[data-ghx-vscroll] body ::-webkit-scrollbar-thumb:hover { background: " + accent + "; }",
+      "html[data-ghx-vscroll] body ::-webkit-scrollbar-track { background: transparent; }",
+      ""
+    ].join("\n");
+  }
 
   /* ------------------------------------------------------------------ *
    * Static CSS: tips, simplify de-emphasis rules
@@ -272,20 +428,23 @@
       base = findTheme(settings.theme).base;
     }
     var root = document.documentElement;
-    var onRepo = isRepoPage();
     if (root) {
       root.setAttribute("data-color-mode", base);
       root.setAttribute("data-ghx-theme", settings.theme);
       if (settings.hideHScroll) root.setAttribute("data-ghx-hscroll", "1");
       else root.removeAttribute("data-ghx-hscroll");
+      if (settings.vScroll !== false) root.setAttribute("data-ghx-vscroll", "1");
+      else root.removeAttribute("data-ghx-vscroll");
       try { root.style.colorScheme = base; } catch (e) {}
     }
     injectStyle(
       buildThemeCss(settings) + "\n" +
-      buildBgCss(settings, onRepo) + "\n" +
+      buildBgCss(settings) + "\n" +
       containerCss(settings) + "\n" +
       glassCss(settings) + "\n" +
+      primaryBtnCss(settings) + "\n" +
       HSCROLL_CSS + "\n" +
+      vscrollCss(settings) + "\n" +
       EXTRA_CSS
     );
   }
@@ -540,7 +699,7 @@
         "font:600 12px/1 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif;" +
         "box-shadow:0 4px 18px rgba(0,0,0,.3);backdrop-filter:blur(8px);";
       pill.addEventListener("click", function () {
-        chrome.storage.sync.set({ simplify: "off" });
+        try { chrome.storage.local.set({ simplify: "off" }); } catch (e) {}
       });
       document.body.appendChild(pill);
     }
@@ -668,9 +827,9 @@
     try {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "f" || e.key === "F")) {
         e.preventDefault();
-        chrome.storage.sync.get("simplify", function (s) {
+        chrome.storage.local.get("simplify", function (s) {
           var cur = (s && s.simplify) || "off";
-          chrome.storage.sync.set({ simplify: cur === "focus" ? "off" : "focus" });
+          chrome.storage.local.set({ simplify: cur === "focus" ? "off" : "focus" });
         });
       }
     } catch (err) {}
