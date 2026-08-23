@@ -1,9 +1,15 @@
 /**
- * OCTANE popup logic — v0.4.0
+ * OCTANE popup logic — v0.5.0
  *
- * Settings live in:
- *   chrome.storage.sync  — theme, accent, simplify, tips, fx, hideHScroll, bg, custom
- *   chrome.storage.local — bgImage (wallpaper data URL, can be large)
+ * ALL settings live in chrome.storage.local (theme, accent, simplify, tips,
+ * fx, hideHScroll, vScroll, bg, custom, bgImage).
+ *
+ * v0.5.0 fix: settings used to live in chrome.storage.sync, which enforces
+ * a hard quota of ~120 writes/minute. Dragging a color picker fires dozens
+ * of writes per second, so the quota blew in seconds and every later write
+ * silently failed — customizing "worked for a moment, then broke". local
+ * storage has no such rate limit (plus we hold unlimitedStorage). Writes
+ * are also debounced now, and old sync data is migrated over once.
  *
  * Editing ANY color in the Custom tab applies the custom theme immediately
  * (theme is switched to "custom" as you tweak), so there is no separate
@@ -13,7 +19,7 @@
   "use strict";
 
   var GHX = self.GHX;
-  var S = Object.assign({}, GHX.DEFAULTS, { bgImage: "" });
+  var S = Object.assign(GHX.clone(GHX.DEFAULTS), { bgImage: "" });
 
   var HINTS = {
     off: "GitHub exactly as-is \u2014 everything stays.",
@@ -28,7 +34,7 @@
 
   function cacheEls() {
     ["themes", "accent", "accentHex", "accentClear", "simplify", "simplifyHint",
-     "tips", "fx", "hscroll", "reset", "bgType", "bgHint", "bgImageCtl", "bgUpload", "bgRemoveImg",
+     "tips", "fx", "hscroll", "vscroll", "reset", "bgType", "bgHint", "bgImageCtl", "bgUpload", "bgRemoveImg",
      "bgFile", "bgUrl", "bgPreview", "bgGradientCtl", "bgC1", "bgC2",
      "gradientChips", "bgAngle", "bgAngleVal", "bgColorCtl", "bgColor",
      "colorChips", "bgFadeCtl", "bgFade", "bgFadeVal", "bgPreviewBig",
@@ -36,21 +42,55 @@
     ].forEach(function (id) { els[id] = $(id); });
   }
 
-  function syncSet(p) { chrome.storage.sync.set(p); }
-  function localSet(p) { chrome.storage.local.set(p); }
+  /* Debounced writes: color pickers fire dozens of `input` events per
+   * second while dragging. We coalesce them into one storage write every
+   * 150ms (trailing), so the page updates near-live without ever spamming
+   * the storage layer. */
+  var pending = {};
+  var flushTimer = null;
+  function flush() {
+    flushTimer = null;
+    var payload = pending;
+    pending = {};
+    try { chrome.storage.local.set(payload); } catch (e) {}
+  }
+  function store(p) {
+    Object.assign(pending, p);
+    if (!flushTimer) flushTimer = setTimeout(flush, 150);
+  }
+  // If the popup closes mid-debounce, push whatever is pending immediately.
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden && flushTimer) { clearTimeout(flushTimer); flush(); }
+  });
+  window.addEventListener("pagehide", function () {
+    if (flushTimer) { clearTimeout(flushTimer); flush(); }
+  });
+  // keep old call-sites working — everything goes to storage.local now
+  function syncSet(p) { store(p); }
+  function localSet(p) { store(p); }
 
   function load(cb) {
-    chrome.storage.sync.get(GHX.DEFAULTS, function (s) {
-      S = GHX.normalizeSettings(s);
-      chrome.storage.local.get({ bgImage: "" }, function (l) {
-        S.bgImage = (l && l.bgImage) || "";
+    chrome.storage.local.get(null, function (l) {
+      l = l || {};
+      if (l.__migrated || typeof l.theme === "string") {
+        S = GHX.normalizeSettings(l);
+        S.bgImage = l.bgImage || "";
+        cb();
+        return;
+      }
+      // One-time migration from the old storage.sync home.
+      chrome.storage.sync.get(null, function (sy) {
+        sy = sy || {};
+        S = GHX.normalizeSettings(sy);
+        S.bgImage = l.bgImage || "";
+        try { chrome.storage.local.set(Object.assign({}, sy, { __migrated: true })); } catch (e) {}
         cb();
       });
     });
   }
 
-  function saveBg() { syncSet({ bg: S.bg }); }
-  function saveCustom() { syncSet({ custom: S.custom, theme: "custom" }); }
+  function saveBg() { store({ bg: S.bg }); }
+  function saveCustom() { store({ custom: S.custom, theme: "custom" }); }
 
   var toastTimer = null;
   function toast(msg) {
@@ -416,7 +456,12 @@
 
     els.hscroll.addEventListener("change", function () {
       S.hideHScroll = els.hscroll.checked;
-      syncSet({ hideHScroll: S.hideHScroll });
+      store({ hideHScroll: S.hideHScroll });
+    });
+
+    els.vscroll.addEventListener("change", function () {
+      S.vScroll = els.vscroll.checked;
+      store({ vScroll: S.vScroll });
     });
   }
 
@@ -438,9 +483,8 @@
 
   function bindReset() {
     els.reset.addEventListener("click", function () {
-      syncSet(GHX.DEFAULTS);
-      localSet({ bgImage: "" });
-      S = Object.assign({}, GHX.DEFAULTS, { bgImage: "" });
+      store(Object.assign(GHX.clone(GHX.DEFAULTS), { bgImage: "", __migrated: true }));
+      S = Object.assign(GHX.clone(GHX.DEFAULTS), { bgImage: "" });
       renderAll();
       toast("Everything reset");
     });
@@ -453,6 +497,7 @@
     els.tips.checked = !!S.tips;
     els.fx.checked = S.fx !== false;
     els.hscroll.checked = !!S.hideHScroll;
+    els.vscroll.checked = S.vScroll !== false;
     renderBackground();
     renderCustom();
   }
